@@ -1,5 +1,5 @@
-# Sample-Work-4
-Yelp Catering Database Management System using SQL Server, R shiny package and LucidChart
+# Yelp Catering Database Management System using SQL Server, R shiny package and LucidChart
+
 •	Mission Statement
 Build up the database by using scientific statistical method combining with the reviews by the formal customer, to efficiently providing latest information of restaurants around the university as well as ranking and sorting the result based on their specific preference on the flavor and service to help the customers choose wisely among various catering business.
 •	Mission Objectives:
