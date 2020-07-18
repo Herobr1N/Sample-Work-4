@@ -1,0 +1,234 @@
+library(shiny)
+library(shinydashboard)
+library(dplyr)
+library(tibble)
+library(pool)
+library(rlang)
+library(DT)
+
+pool <- dbPool(RSQLite::SQLite(), dbname = "Project0502-06_tastebuds.db")
+allTables <- db_list_tables(pool)
+
+ui <- dashboardPage(
+  dashboardHeader(title = "Taste buds"),
+  dashboardSidebar( 
+    sidebarMenu(id = "tabs",
+                menuItem("Overview", tabName = "dashboard"),
+                menuItem("Create", tabName = "create"),
+                menuItem("Read", tabName = "read"),
+                menuItem("Update", tabName = "update"),
+                menuItem("Delete", tabName = "delete")
+    )
+  ),
+  dashboardBody(
+    tabItems(
+      tabItem(tabName = "dashboard",
+              h2("Current Table in Table Description"),
+              dataTableOutput(outputId = "overview")
+      ),
+      
+      tabItem(tabName = "create",
+              h2("Create"),
+              actionButton(
+                inputId = "Insert", 
+                label = "Create entry", 
+                style="color: black; background-color: red"
+              ),
+              selectInput(
+                inputId = "create_table", 
+                label = "Choose a table", 
+                choices = 'Review'
+              ),
+              uiOutput(outputId = "fields")
+      ),
+      
+      tabItem(tabName = "read",
+              h2("Read"),
+              selectInput(
+                inputId = "select_table",
+                label = "Select the table to Read",
+                choices =allTables
+              ),
+              dataTableOutput(outputId = "read_table")
+      ),
+      
+      tabItem(tabName = "update",
+              h2("Update"),
+              actionButton(
+                inputId = "Update", 
+                label = "Update entry", 
+                style="color: black; background-color: red"
+              ),
+              selectInput(
+                inputId = "update_table", 
+                label = "Choose a table", 
+                choices = 'Review'
+              ),
+              checkboxGroupInput(inputId = "key", label = "Select Key", 
+                                 choices = NULL),
+              selectInput(
+                inputId = "rId",
+                label = "Select Input to Update",
+                choices = NULL
+              ),
+              uiOutput(outputId = "fields_u")
+      ),
+      
+      tabItem(tabName = "delete",
+              h2("Delete"),
+              actionButton(
+                inputId = "Delete", 
+                label = "Delete entry", 
+                style="color: black; background-color: red"
+              ),
+              selectInput(
+                inputId = "delete_table", 
+                label = "Choose a table", 
+                choices = 'Review'
+              ),
+              selectInput(
+                inputId = "key_id",
+                label = "Select key to Delete",
+                choices = NULL
+              )
+      )
+    )
+  )
+)
+
+server <- function(input, output, session) { 
+  
+  output$overview <- renderDataTable({
+    allTables <- as.data.frame(allTables)
+    num_of_col <- c()
+    num_of_row <- c()
+    for (i in 1: nrow(allTables)){
+      num_of_col <- c(num_of_col, length(db_query_fields(pool, allTables[ i , 1])))
+      num_of_row <- c(num_of_row, db_query_rows(pool, allTables[ i , 1]))
+    }
+    allTables <- cbind(allTables, num_of_row, num_of_col)
+    names(allTables) <- c("Table_Names", "Num_of_rows", "Num_of_cols")
+    datatable(allTables)
+  })
+  
+  output$read_table <- renderDataTable({
+    x <- data.frame(pool %>% tbl(input$select_table))
+    datatable(x)
+  })
+  
+  
+  output$fields <- renderUI({
+    
+    if (sym(input$create_table) == "Review"){
+      Business <- as.data.frame(pool %>% tbl("Business"))
+      user <- as.data.frame(pool %>% tbl("user"))
+      tagList(
+        textInput("rId", "Enter Review Id"),
+        textInput("rstars", "Enter review star"),
+        dateInput("rDate", "Enter your review date"),
+        textInput("useful", "Enter number of useful"),
+        textInput("funny", "Enter number of funny"),
+        textInput("cool", "Enter number of cool"),
+        textInput("rText", "Enter your review"),
+        selectInput("bId", label = "Enter Business Id", choices = Business$bId),
+        selectInput("uId", label = "Enter User Id", choices = user$uId)
+      )
+    }
+    
+    
+  })
+  
+  observeEvent(input$Insert, {
+    df <- data.frame(
+      rId = input$rId,bId = input$bId,uId = input$uId,
+      rstars = input$rstars,rDate = input$rDate,rtext = input$rtext,
+      useful = input$useful,funny = input$funny,cool = input$cool,
+      stringsAsFactors = FALSE)
+    print(df)
+    sql <- "INSERT INTO ?table VALUES(?rId, ?bId, ?uId,
+    ?rstars, ?rDate, ?rText, ?useful, ?funny, ?cool);"
+    
+    query <- sqlInterpolate(pool, sql, .dots = c(
+      list(table = input$create_table), 
+      as_list(df)
+    ))
+    print(query)
+    dbExecute(pool, query)
+  })
+  
+  observe({
+    req(input$update_table)
+    cols <- db_query_fields(pool, input$update_table)
+    updateCheckboxGroupInput(session, "key", choices = cols)
+  })
+  
+  observe({
+    tbl <- data.frame(pool %>% tbl(input$update_table) )
+    updateSelectInput(session, "rId", choices = tbl[,input$key] )
+  })
+  
+  
+  output$fields_u <- renderUI({
+    req(input$rId)
+    if (sym(input$create_table) == "Review"){
+      Business <- as.data.frame(pool %>% tbl("Business"))
+      user <- as.data.frame(pool %>% tbl("user"))
+      tagList(
+        textInput("rId", "Enter Review Id"),
+        textInput("rstars", "Enter review star"),
+        dateInput("rDate", "Enter your review date"),
+        textInput("useful", "Enter number of useful"),
+        textInput("funny", "Enter number of funny"),
+        textInput("cool", "Enter number of cool"),
+        textInput("rText", "Enter your review"),
+        selectInput("bId", label = "Enter Business Id", choices = Business$bId),
+        selectInput("uId", label = "Enter User Id", choices = user$uId)
+        
+      )
+    }
+    
+  })
+  
+  
+  observeEvent(input$Insert, {
+    df <- data.frame(
+      rId = input$rId,bId = input$bId,uId = input$uId,
+      rstars = input$rstars,rDate = input$rDate,rtext = input$rtext,
+      useful = input$useful,funny = input$funny,cool = input$cool,
+      stringsAsFactors = FALSE)
+    
+    sql <- "UPDATE ?table SET bId = ?bId, uId = ?uId, 
+    rstars = ?rstars, rDate = ?rDate, rtext = ?rtext, useful = ?useful, 
+    funny = ?funny, cool = ?cool WHERE rId = ?idVal;"
+    
+    query <- sqlInterpolate(pool, sql, .dots = c(
+      list(table = input$update_table), 
+      as_list(df),
+      list(idVal = input$rId)
+    ))
+    dbExecute(pool, query)
+  })
+  
+  observe({
+    if(sym(input$delete_table) == "Review"){
+      tbl <- data.frame(pool %>% tbl(input$delete_table) )
+      print(tbl)
+      updateSelectInput(session, "key_id", choices = tbl$rId )
+    }
+  })
+  
+  observeEvent(input$Delete, {
+    
+    sql <- "DELETE FROM ?table WHERE rId = ?idVal;"
+    
+    query <- sqlInterpolate(pool, sql, .dots = c(
+      list(table = input$delete_table), 
+      list(idVal = input$key_id)
+    ))
+    dbExecute(pool, query)
+  })
+  
+  
+}
+
+shinyApp(ui, server)
